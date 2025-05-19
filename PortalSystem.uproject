@@ -12,7 +12,12 @@
 				"Engine",
 				"CoreUObject"
 			]
-		}
+		},
+		{
+    			"Name": "ViewportEditorFixer",
+    			"Type": "Editor",
+    			"LoadingPhase": "Default"
+  		}
 	],
 	"Plugins": [
 		{

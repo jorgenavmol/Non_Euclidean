@@ -7,6 +7,9 @@
 #include "Engine/Engine.h"
 #include "Framework/Application/SlateApplication.h"
 #include "EditorViewportClient.h"
+#include "Blueprint/UserWidget.h"
+
+
 
 // Detecta si el ratón está sobre el viewport principal del editor.
 bool UEditorMouseTracker::IsMouseOverViewport()
@@ -88,4 +91,54 @@ bool UEditorMouseTracker::GetMouseWorldPositionEditor(FVector& WorldPosition)
 #endif
     return false;
 }
+
+bool UEditorMouseTracker::GetWidgetWorldPositionEditor(UUserWidget* Widget, FVector& WorldPosition)
+{
+#if WITH_EDITOR
+    if (!GEditor || !Widget) return false;
+
+    // Obtener el widget de tipo Slate (nativo)
+    TSharedPtr<SWidget> SlateWidget = Widget->GetCachedWidget();
+    if (!SlateWidget.IsValid()) return false;
+
+    // Obtener la geometría del widget en espacio absoluto (pantalla)
+    FGeometry Geometry = SlateWidget->GetPaintSpaceGeometry();
+    FVector2D WidgetScreenPos = Geometry.GetAbsolutePosition() + Geometry.GetLocalSize() * 0.5f;
+
+    // Obtener viewport y client del editor
+    FViewport* Viewport = GEditor->GetActiveViewport();
+    FEditorViewportClient* ViewportClient = static_cast<FEditorViewportClient*>(Viewport ? Viewport->GetClient() : nullptr);
+    if (!Viewport || !ViewportClient) return false;
+
+    // Construir la vista de escena (como en la función original)
+    FSceneViewFamilyContext ViewFamily(FSceneViewFamily::ConstructionValues(
+        Viewport,
+        ViewportClient->GetScene(),
+        ViewportClient->EngineShowFlags));
+
+    FSceneView* SceneView = ViewportClient->CalcSceneView(&ViewFamily);
+    if (!SceneView) return false;
+
+    // Deproyectar la posición del widget
+    FVector Origin, Direction;
+    SceneView->DeprojectFVector2D(WidgetScreenPos, Origin, Direction);
+
+    // Lanzar un raycast al mundo
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World) return false;
+
+    FHitResult Hit;
+    if (World->LineTraceSingleByChannel(Hit, Origin, Origin + Direction * 100000.f, ECC_Visibility))
+    {
+        WorldPosition = Hit.Location;
+        return true;
+    }
+#endif
+
+    return false;
+}
+
+
+
+
 

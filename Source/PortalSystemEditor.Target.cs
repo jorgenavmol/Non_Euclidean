@@ -11,5 +11,6 @@ public class PortalSystemEditorTarget : TargetRules
 		DefaultBuildSettings = BuildSettingsVersion.V5;
 
 		ExtraModuleNames.AddRange( new string[] { "PortalSystem" } );
-	}
+        ExtraModuleNames.AddRange( new string[] { "ViewportEditorFixer" });
+    }
 }

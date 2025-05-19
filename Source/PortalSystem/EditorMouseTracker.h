@@ -20,5 +20,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor|Viewport")
 	static bool GetMouseWorldPositionEditor(FVector& WorldPosition);
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor|Viewport")
+	static bool GetWidgetWorldPositionEditor(UUserWidget* Widget, FVector& WorldPosition);
 	
 };

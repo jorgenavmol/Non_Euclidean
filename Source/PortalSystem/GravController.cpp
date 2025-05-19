@@ -4,64 +4,76 @@
 
 void AGravController::UpdateRotation(float DeltaTime)
 {
-	FVector GravityDirection = FVector::DownVector;
+    FVector GravityDirection = FVector::DownVector;
+    bool bGravityFlipped = false;
 
-	if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetPawn()))
-	{
-		if (UCharacterMovementComponent* MoveComp = PlayerCharacter->GetCharacterMovement())
-		{
-			GravityDirection = MoveComp->GetGravityDirection();
+    if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetPawn()))
+    {
+        if (UCharacterMovementComponent* MoveComp = PlayerCharacter->GetCharacterMovement())
+        {
+            GravityDirection = MoveComp->GetGravityDirection();
 
-			WorkingGravity = FMath::VInterpTo(WorkingGravity, GravityDirection, DeltaTime, InterpSpeed);
-			
-			// Normalizar WorkingGravity
-			WorkingGravity.Normalize();
-		}
-	}
+            float Dot = FVector::DotProduct(WorkingGravity, GravityDirection);
 
-	// Obtener rotación actual de la cámara
-	FRotator ViewRotation = GetControlRotation();
+            if (Dot < -0.999f)
+            {
+                bGravityFlipped = true;
+                WorkingGravity = GravityDirection;
+            }
+            else
+            {
+                WorkingGravity = FMath::VInterpTo(WorkingGravity, GravityDirection, DeltaTime, InterpSpeed);
+            }
 
-	// Si hay una gravedad anterior, aplicar delta de rotación
-	if (!LastFrameGravity.IsZero())
-	{
-		const FQuat DeltaGravityRotation = FQuat::FindBetweenNormals(LastFrameGravity, WorkingGravity);
-		
-		if (GEngine)
-		{
-			FString DebugMessage = FString::Printf(TEXT("DeltaGravityRotation: X=%f, Y=%f, Z=%f, W=%f"),
-				DeltaGravityRotation.X, DeltaGravityRotation.Y, DeltaGravityRotation.Z, DeltaGravityRotation.W);
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, DebugMessage);
-		}
+            WorkingGravity.Normalize();
+        }
+    }
 
-		const FQuat WarpedCameraRotation = DeltaGravityRotation * FQuat(ViewRotation);
-		ViewRotation = WarpedCameraRotation.Rotator();
-	}
-	LastFrameGravity = WorkingGravity;
+    // Obtener rotación actual
+    FRotator ViewRotation = GetControlRotation();
 
-	// Pasar a espacio relativo a gravedad
-	ViewRotation = GetGravityRelativeRotation(ViewRotation, WorkingGravity);
+    if (!LastFrameGravity.IsZero() && !bGravityFlipped)
+    {
+        // Solo aplicar interpolación si no es un cambio de 180°
+        const FQuat DeltaGravityRotation = FQuat::FindBetweenNormals(LastFrameGravity, WorkingGravity);
+        const FQuat WarpedCameraRotation = DeltaGravityRotation * FQuat(ViewRotation);
+        ViewRotation = WarpedCameraRotation.Rotator();
+    }
 
-	FRotator DeltaRot(RotationInput);
+    // Al cambiar 180°, simplemente invertir la vista vertical (mirar "desde abajo")
+    if (bGravityFlipped)
+    {
+        ViewRotation.Pitch *= -1;
+        ViewRotation.Roll *= -1;
 
-	if (PlayerCameraManager)
-	{
-		PlayerCameraManager->ProcessViewRotation(DeltaTime, ViewRotation, DeltaRot);
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("Gravedad 180°: manteniendo dirección sin girar"));
+        }
+    }
 
-		ViewRotation.Roll = 0; // Mantener horizonte en relación a gravedad
+    LastFrameGravity = WorkingGravity;
 
-		// Volver a rotación global (mundo) y aplicarla
-		SetControlRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
-		
-	}
+    // Pasar a espacio relativo a gravedad
+    ViewRotation = GetGravityRelativeRotation(ViewRotation, WorkingGravity);
 
-	if (APawn* P = GetPawnOrSpectator())
-	{
-		P->FaceRotation(ViewRotation, DeltaTime);
+    FRotator DeltaRot(RotationInput);
 
-		GetPawn()->SetActorRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
-	}
+    if (PlayerCameraManager)
+    {
+        PlayerCameraManager->ProcessViewRotation(DeltaTime, ViewRotation, DeltaRot);
+        ViewRotation.Roll = 0;
+        SetControlRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
+    }
+
+    if (APawn* P = GetPawnOrSpectator())
+    {
+        P->FaceRotation(ViewRotation, DeltaTime);
+        GetPawn()->SetActorRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
+    }
 }
+
+
 
 FRotator AGravController::GetGravityRelativeRotation(FRotator Rotation, FVector GravityDirection)
 {
