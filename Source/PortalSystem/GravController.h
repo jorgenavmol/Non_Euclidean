@@ -32,6 +32,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gravity")
 	float InterpSpeed = 3.0f;
 
+	FRotator TargetRotation;
+	FQuat StartQuat;
+	FQuat TargetQuat;
+
+	bool bIsInterpolating180 = false;
+	float RotationInterpProgress = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gravity")
+	float Rotation180InterpSpeed = 2.0f;
+
 
 private:
 	FVector LastFrameGravity = FVector::ZeroVector;

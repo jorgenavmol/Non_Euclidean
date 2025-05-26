@@ -7,18 +7,57 @@ void AGravController::UpdateRotation(float DeltaTime)
     FVector GravityDirection = FVector::DownVector;
     bool bGravityFlipped = false;
 
+    FRotator ViewRotation = GetControlRotation();
+
     if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetPawn()))
     {
         if (UCharacterMovementComponent* MoveComp = PlayerCharacter->GetCharacterMovement())
         {
             GravityDirection = MoveComp->GetGravityDirection();
-
             float Dot = FVector::DotProduct(WorkingGravity, GravityDirection);
 
-            if (Dot < -0.999f)
+            if (Dot < -0.999f) // Dirección de gravedad opuesta  giro 180°
             {
                 bGravityFlipped = true;
                 WorkingGravity = GravityDirection;
+
+                if (APawn* P = GetPawnOrSpectator())
+                {
+                    StartQuat = P->GetActorQuat();
+
+                    FVector NewUp = -GravityDirection;
+                    FVector Forward = P->GetActorForwardVector();
+
+                    // Si están alineados, no se puede proyectar  construir dirección alternativa
+                    float Alignment = FMath::Abs(FVector::DotProduct(Forward, NewUp));
+                    if (Alignment > 0.99f)
+                    {
+                        FVector Arbitrary = FVector::RightVector;
+                        if (FMath::Abs(FVector::DotProduct(Arbitrary, NewUp)) > 0.99f)
+                        {
+                            Arbitrary = FVector::ForwardVector;
+                        }
+                        FVector Right = FVector::CrossProduct(Arbitrary, NewUp).GetSafeNormal();
+                        Forward = FVector::CrossProduct(NewUp, Right).GetSafeNormal();
+                    }
+                    else
+                    {
+                        Forward = FVector::VectorPlaneProject(Forward, NewUp).GetSafeNormal();
+                    }
+
+                    FVector Right = FVector::CrossProduct(NewUp, Forward).GetSafeNormal();
+                    FVector CorrectedForward = FVector::CrossProduct(Right, NewUp).GetSafeNormal();
+
+                    FMatrix RotMatrix;
+                    RotMatrix.SetAxis(0, CorrectedForward); // X = Forward
+                    RotMatrix.SetAxis(1, Right);             // Y = Right
+                    RotMatrix.SetAxis(2, NewUp);             // Z = Up
+
+                    TargetQuat = FQuat(RotMatrix);
+
+                    bIsInterpolating180 = true;
+                    RotationInterpProgress = 0.0f;
+                }
             }
             else
             {
@@ -29,34 +68,49 @@ void AGravController::UpdateRotation(float DeltaTime)
         }
     }
 
-    // Obtener rotación actual
-    FRotator ViewRotation = GetControlRotation();
+    if (bIsInterpolating180)
+    {
+        RotationInterpProgress += DeltaTime * Rotation180InterpSpeed;
+
+        if (APawn* P = GetPawnOrSpectator())
+        {
+            const float Alpha = FMath::Clamp(RotationInterpProgress, 0.0f, 1.0f);
+            const FQuat InterpolatedQuat = FQuat::Slerp(StartQuat, TargetQuat, Alpha);
+            P->SetActorRotation(InterpolatedQuat);
+
+            // También rotar la cámara
+            const FQuat ControlQuat = InterpolatedQuat;
+            SetControlRotation(ControlQuat.Rotator());
+        }
+
+        if (RotationInterpProgress >= 1.0f)
+        {
+            bIsInterpolating180 = false;
+
+            if (APawn* P = GetPawnOrSpectator())
+            {
+                FRotator FinalRot = TargetQuat.Rotator();
+                FinalRot.Pitch = 0.0f;
+                FinalRot.Roll = 0.0f;
+                SetControlRotation(FinalRot);
+            }
+
+            return;
+        }
+
+        return;
+    }
 
     if (!LastFrameGravity.IsZero() && !bGravityFlipped)
     {
-        // Solo aplicar interpolación si no es un cambio de 180°
         const FQuat DeltaGravityRotation = FQuat::FindBetweenNormals(LastFrameGravity, WorkingGravity);
         const FQuat WarpedCameraRotation = DeltaGravityRotation * FQuat(ViewRotation);
-        ViewRotation = WarpedCameraRotation.Rotator();
-    }
-
-    // Al cambiar 180°, simplemente invertir la vista vertical (mirar "desde abajo")
-    if (bGravityFlipped)
-    {
-        ViewRotation.Pitch *= -1;
-        ViewRotation.Roll *= -1;
-
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("Gravedad 180°: manteniendo dirección sin girar"));
-        }
+        //ViewRotation = WarpedCameraRotation.Rotator();
     }
 
     LastFrameGravity = WorkingGravity;
 
-    // Pasar a espacio relativo a gravedad
     ViewRotation = GetGravityRelativeRotation(ViewRotation, WorkingGravity);
-
     FRotator DeltaRot(RotationInput);
 
     if (PlayerCameraManager)
@@ -66,33 +120,37 @@ void AGravController::UpdateRotation(float DeltaTime)
         SetControlRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
     }
 
-    if (APawn* P = GetPawnOrSpectator())
+    if (!bIsInterpolating180)
     {
-        P->FaceRotation(ViewRotation, DeltaTime);
-        GetPawn()->SetActorRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
+        if (APawn* P = GetPawnOrSpectator())
+        {
+            P->FaceRotation(ViewRotation, DeltaTime);
+            GetPawn()->SetActorRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
+        }
     }
 }
 
 
 
+
 FRotator AGravController::GetGravityRelativeRotation(FRotator Rotation, FVector GravityDirection)
 {
-	if (!GravityDirection.Equals(FVector::DownVector))
-	{
-		const FQuat GravityRotation = FQuat::FindBetweenNormals(GravityDirection, FVector::DownVector);
-		return (GravityRotation * Rotation.Quaternion()).Rotator();
-	}
+    if (!GravityDirection.Equals(FVector::DownVector))
+    {
+        const FQuat GravityRotation = FQuat::FindBetweenNormals(GravityDirection, FVector::DownVector);
+        return (GravityRotation * Rotation.Quaternion()).Rotator();
+    }
 
-	return Rotation;
+    return Rotation;
 }
 
 FRotator AGravController::GetGravityWorldRotation(FRotator Rotation, FVector GravityDirection)
 {
-	if (!GravityDirection.Equals(FVector::DownVector))
-	{
-		const FQuat GravityRotation = FQuat::FindBetweenNormals(FVector::DownVector, GravityDirection);
-		return (GravityRotation * Rotation.Quaternion()).Rotator();
-	}
+    if (!GravityDirection.Equals(FVector::DownVector))
+    {
+        const FQuat GravityRotation = FQuat::FindBetweenNormals(FVector::DownVector, GravityDirection);
+        return (GravityRotation * Rotation.Quaternion()).Rotator();
+    }
 
-	return Rotation;
+    return Rotation;
 }
