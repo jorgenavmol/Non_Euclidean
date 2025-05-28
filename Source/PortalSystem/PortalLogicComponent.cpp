@@ -139,18 +139,6 @@ void UPortalLogicComponent::RenderFlatView()
 	//}
 }
 
-void UPortalLogicComponent::RenderFlatView(const FVector& VirtualCamLoc, const FRotator& VirtualCamRot)
-{
-	USceneCaptureComponent2D* LinkedCamera = LinkedPortal->FindComponentByClass<USceneCaptureComponent2D>();
-	if (!LinkedCamera) return;
-
-	FVector NewLoc = UpdateLoc(VirtualCamLoc);
-	FRotator NewRot = UpdateRot(VirtualCamRot);
-
-	LinkedCamera->SetWorldLocationAndRotation(NewLoc, NewRot);
-	LinkedCamera->CaptureScene();
-}
-
 void UPortalLogicComponent::RenderRecursiveView(FVector Location, FRotator Rotation, int CurrentRecursion)
 {
 
@@ -186,21 +174,6 @@ void UPortalLogicComponent::RenderRecursiveView(FVector Location, FRotator Rotat
 		LinkedCamera->SetWorldLocationAndRotation(TempLoc, TempRot);
 		LinkedCamera->CaptureScene();
 		CurrentRecursion = 0;
-
-		// Y haces que otros portales visibles hagan render plano
-		TArray<AActor*> FoundPortals;
-		UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName("Portal"), FoundPortals);
-
-		for (AActor* Actor : FoundPortals)
-		{
-			if (Actor == GetOwner() || Actor == LinkedPortal) continue;
-
-			UPortalLogicComponent* OtherLogic = Actor->FindComponentByClass<UPortalLogicComponent>();
-			if (OtherLogic)
-			{
-				//OtherLogic->RenderFlatViewFromMainCamera(); // sin recursion
-			}
-		}
 	}
 	else if (CurrentRecursion < MaxRecursions)
 	{
@@ -221,25 +194,20 @@ void UPortalLogicComponent::RenderRecursiveView(FVector Location, FRotator Rotat
 		FVector TempLoc = UpdateLoc(Location);
 		FRotator TempRot = UpdateRot(Rotation);
 
-		// Dirección desde el jugador hacia el portal
-		FVector PortalDir = (GetOwner()->GetActorLocation() - PlayerLocation).GetSafeNormal();
-
-		// Desplazar la cámara aún más lejos para simular que sigue el pasillo
-		// Dirección y plano del portal
-		FVector PortalForward = GetOwner()->GetActorForwardVector();
 		FVector PortalLocation = GetOwner()->GetActorLocation();
+		FVector LinkedPortalLocation = LinkedPortal->GetActorLocation();
 
-		// Vector desde portal al jugador
+		// Vector completo entre portales (incluye vertical)
+		FVector Delta = LinkedPortalLocation - PortalLocation;
+
 		FVector PlayerToPortal = PlayerLocation - PortalLocation;
-
-		// Distancia proyectada del jugador sobre el plano normal del portal
-		float DistanceToPortalPlane = FVector::DotProduct(PlayerToPortal, PortalForward);
+		float DistanceToPortalPlane = FVector::DotProduct(PlayerToPortal, GetOwner()->GetActorForwardVector());
 
 		// Ajuste suave (puedes probar con multiplicadores)
 		float DistanceFactor = -DistanceToPortalPlane * 1.001f;
 
-		// Calcular la ubicación final desplazada
-		FVector FakeInfiniteLoc = TempLoc + PortalForward * DistanceFactor;
+		// Empuja en la dirección diagonal entre portales, manteniendo la distancia escalada
+		FVector FakeInfiniteLoc = TempLoc + Delta.GetSafeNormal() * DistanceFactor;
 
 		LinkedCamera->SetWorldLocationAndRotation(FakeInfiniteLoc, TempRot);
 		Panel->SetVisibility(false);
@@ -273,7 +241,7 @@ void UPortalLogicComponent::ControlRecursions() {
 
 	// La cámara está mirando hacia el portal
 	if ((DotProduct > 0.6f || PortalCollider->IsOverlappingActor(PlayerCharacter)) && DotView > 0.6f) {
-		MaxRecursions = 5;
+		MaxRecursions = 4;
 	}
 	else
 	{

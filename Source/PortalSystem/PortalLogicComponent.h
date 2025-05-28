@@ -60,10 +60,12 @@ public:
 
 
 
-	void RenderFlatView(const FVector& VirtualCamLoc, const FRotator& VirtualCamRot);
+
 
 	UFUNCTION(BlueprintCallable, Category = "Portal")
 	bool IsPortalInFront(AActor* Observer, AActor* Target);
+
+
 
 
 
