@@ -16,7 +16,7 @@ void AGravController::UpdateRotation(float DeltaTime)
             GravityDirection = MoveComp->GetGravityDirection();
             float Dot = FVector::DotProduct(WorkingGravity, GravityDirection);
 
-            if (Dot < -0.999f) // Dirección de gravedad opuesta  giro 180°
+            if (Dot < -0.999f) // Dirección de gravedad opuesta = giro 180°
             {
                 bGravityFlipped = true;
                 WorkingGravity = GravityDirection;
@@ -28,7 +28,7 @@ void AGravController::UpdateRotation(float DeltaTime)
                     FVector NewUp = -GravityDirection;
                     FVector Forward = P->GetActorForwardVector();
 
-                    // Si están alineados, no se puede proyectar  construir dirección alternativa
+                    // Si están alineados, no se puede proyectar = construir dirección alternativa
                     float Alignment = FMath::Abs(FVector::DotProduct(Forward, NewUp));
                     if (Alignment > 0.99f)
                     {
@@ -49,9 +49,9 @@ void AGravController::UpdateRotation(float DeltaTime)
                     FVector CorrectedForward = FVector::CrossProduct(Right, NewUp).GetSafeNormal();
 
                     FMatrix RotMatrix;
-                    RotMatrix.SetAxis(0, CorrectedForward); // X = Forward
-                    RotMatrix.SetAxis(1, Right);             // Y = Right
-                    RotMatrix.SetAxis(2, NewUp);             // Z = Up
+                    RotMatrix.SetAxis(0, CorrectedForward);
+                    RotMatrix.SetAxis(1, Right);
+                    RotMatrix.SetAxis(2, NewUp);
 
                     TargetQuat = FQuat(RotMatrix);
 
@@ -76,11 +76,11 @@ void AGravController::UpdateRotation(float DeltaTime)
         {
             const float Alpha = FMath::Clamp(RotationInterpProgress, 0.0f, 1.0f);
             const FQuat InterpolatedQuat = FQuat::Slerp(StartQuat, TargetQuat, Alpha);
-            P->SetActorRotation(InterpolatedQuat);
+			P->SetActorRotation(InterpolatedQuat); // Rotacion del jugador.
 
             // También rotar la cámara
             const FQuat ControlQuat = InterpolatedQuat;
-            SetControlRotation(ControlQuat.Rotator());
+			SetControlRotation(ControlQuat.Rotator()); // Rotacion de la cámara.
         }
 
         if (RotationInterpProgress >= 1.0f)
@@ -117,7 +117,7 @@ void AGravController::UpdateRotation(float DeltaTime)
     {
         PlayerCameraManager->ProcessViewRotation(DeltaTime, ViewRotation, DeltaRot);
         ViewRotation.Roll = 0;
-        SetControlRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
+		SetControlRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity)); // Rotación de la cámara.
     }
 
     if (!bIsInterpolating180)
@@ -125,13 +125,10 @@ void AGravController::UpdateRotation(float DeltaTime)
         if (APawn* P = GetPawnOrSpectator())
         {
             P->FaceRotation(ViewRotation, DeltaTime);
-            GetPawn()->SetActorRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity));
+			GetPawn()->SetActorRotation(GetGravityWorldRotation(ViewRotation, WorkingGravity)); // Rotación del jugador.
         }
     }
 }
-
-
-
 
 FRotator AGravController::GetGravityRelativeRotation(FRotator Rotation, FVector GravityDirection)
 {

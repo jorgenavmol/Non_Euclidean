@@ -218,34 +218,48 @@ void UPortalLogicComponent::RenderRecursiveView(FVector Location, FRotator Rotat
 
 
 
-void UPortalLogicComponent::ControlRecursions() {
-
+void UPortalLogicComponent::ControlRecursions()
+{
 	APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+	if (!CameraManager || !LinkedPortal) return;
+
 	FVector CameraLocation = CameraManager->GetCameraLocation();
 	FVector PortalLocation = GetOwner()->GetActorLocation();
-	FRotator CameraRotation = CameraManager->GetCameraRotation();
-	FVector CameraForward = CameraRotation.Vector();
+	float Distance = FVector::Dist(CameraLocation, PortalLocation);
 
-	FVector Direction = PortalLocation - CameraLocation;
-	Direction.Normalize();
-
-	float DotProduct = FVector::DotProduct(Direction, CameraForward);
-
-	//Buscamos el colisionador del portal
+	// Buscar el colisionador del portal
 	UBoxComponent* PortalCollider = GetOwner()->FindComponentByTag<UBoxComponent>(TEXT("CollisionDetector"));
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 
+	// Comprobar dirección de los portales
 	FVector ToLinked = (LinkedPortal->GetActorLocation() - GetOwner()->GetActorLocation()).GetSafeNormal();
 	FVector ThisForward = GetOwner()->GetActorForwardVector();
 	float DotView = FVector::DotProduct(ToLinked, ThisForward);
 
-	// La cámara está mirando hacia el portal
-	if ((DotProduct > 0.6f || PortalCollider->IsOverlappingActor(PlayerCharacter)) && DotView > 0.6f) {
-		MaxRecursions = 4;
+	// ¿Está mirando al portal?
+	FRotator CameraRotation = CameraManager->GetCameraRotation();
+	FVector CameraForward = CameraRotation.Vector();
+	FVector DirToPortal = (PortalLocation - CameraLocation).GetSafeNormal();
+	float DotProduct = FVector::DotProduct(DirToPortal, CameraForward);
+
+	// Valores configurables
+	const float MinDistance = 300.f;   // cerca
+	const float MaxDistance = 1500.f;  // lejos
+	const int MinRecursions = 1;
+	const int MaxRecursionsAllowed = 2;
+
+	if ((DotProduct > 0.5f || (PortalCollider && PortalCollider->IsOverlappingActor(PlayerCharacter))) && DotView > 0.6f)
+	{
+		// Interpolar recursión según distancia (cerca = más recursiones)
+		float Alpha = FMath::Clamp((MaxDistance - Distance) / (MaxDistance - MinDistance), 0.f, 1.f);
+		MaxRecursions = FMath::RoundToInt(FMath::Lerp((float)MinRecursions, (float)MaxRecursionsAllowed, Alpha));
+		if (GEngine) {
+			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("Recursiones: %d"), MaxRecursions));
+		}
 	}
 	else
 	{
-		MaxRecursions = 1;
+		MaxRecursions = MinRecursions;
 	}
 }
 
